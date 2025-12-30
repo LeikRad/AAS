@@ -5,54 +5,37 @@ from tensorflow.keras import layers
 import matplotlib.pyplot as plt
 import os
 
-# Configuração
-IMG_HEIGHT = 128
-IMG_WIDTH = 128
-BATCH_SIZE = 32
+# Configuração para POUCOS DADOS
+IMG_HEIGHT = 64  # REDUZIDO para modelo mais simples
+IMG_WIDTH = 64
+BATCH_SIZE = 8   # Pequeno para poucos dados
 EPOCHS = 50
 
 class BinaryAnomalyDetector:
-    def __init__(self, img_height=128, img_width=128):
+    def __init__(self, img_height=64, img_width=64):
         self.img_height = img_height
         self.img_width = img_width
         self.model = None
         self.history = None
         
     def build_model(self):
+        """Modelo SIMPLIFICADO para poucos dados"""
         model = keras.Sequential([
-            layers.Conv2D(32, (3, 3), activation='relu', input_shape=(self.img_height, self.img_width, 1)),
-            layers.BatchNormalization(),
+            # Apenas 1 camada convolucional
+            layers.Conv2D(16, (3, 3), activation='relu', 
+                         input_shape=(self.img_height, self.img_width, 1)),
             layers.MaxPooling2D((2, 2)),
-            layers.Dropout(0.25),
+            layers.Dropout(0.3),
             
-            layers.Conv2D(64, (3, 3), activation='relu'),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D((2, 2)),
-            layers.Dropout(0.25),
-            
-            layers.Conv2D(128, (3, 3), activation='relu'),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D((2, 2)),
-            layers.Dropout(0.25),
-            
-            layers.Conv2D(256, (3, 3), activation='relu'),
-            layers.BatchNormalization(),
-            layers.MaxPooling2D((2, 2)),
-            layers.Dropout(0.25),
-            
+            # Camadas densas mínimas
             layers.Flatten(),
-            layers.Dense(512, activation='relu'),
-            layers.BatchNormalization(),
+            layers.Dense(32, activation='relu'),
             layers.Dropout(0.5),
-            layers.Dense(256, activation='relu'),
-            layers.BatchNormalization(),
-            layers.Dropout(0.5),
-            
             layers.Dense(1, activation='sigmoid')
         ])
         
         model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=0.001),
+            optimizer=keras.optimizers.Adam(learning_rate=0.0001),  # LR menor
             loss='binary_crossentropy',
             metrics=['accuracy', 
                     keras.metrics.Precision(),
@@ -63,23 +46,24 @@ class BinaryAnomalyDetector:
         self.model = model
         return model
     
-    def train(self, train_ds, val_ds):
+    def train(self, train_ds, val_ds, class_weight=None):
+        """Treina com opção de class_weight para balanceamento"""
         early_stopping = keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=10,
+            patience=15,  # Maior paciência para poucos dados
             restore_best_weights=True
         )
         
         reduce_lr = keras.callbacks.ReduceLROnPlateau(
             monitor='val_loss',
             factor=0.5,
-            patience=5,
+            patience=7,
             min_lr=1e-7
         )
         
         checkpoint = keras.callbacks.ModelCheckpoint(
             'best_model.keras',
-            monitor='val_accuracy',
+            monitor='val_loss',  # Mudado para val_loss
             save_best_only=True,
             verbose=1
         )
@@ -88,6 +72,7 @@ class BinaryAnomalyDetector:
             train_ds,
             epochs=EPOCHS,
             validation_data=val_ds,
+            class_weight=class_weight,  # Suporte para balanceamento
             callbacks=[early_stopping, reduce_lr, checkpoint],
             verbose=1
         )
@@ -167,7 +152,9 @@ class BinaryAnomalyDetector:
         print(f"Modelo carregado de: {filepath}")
 
 
-def prepare_datasets(data_dir, img_height=128, img_width=128, batch_size=10, validation_split=0.2, seed=42):
+def prepare_datasets(data_dir, img_height=64, img_width=64, batch_size=8, 
+                     validation_split=0.2, seed=42):
+    """Prepara datasets com tamanhos corretos"""
     train_ds = tf.keras.utils.image_dataset_from_directory(
         data_dir,
         validation_split=validation_split,
@@ -176,7 +163,8 @@ def prepare_datasets(data_dir, img_height=128, img_width=128, batch_size=10, val
         image_size=(img_height, img_width),
         batch_size=batch_size,
         color_mode='grayscale',
-        label_mode='binary'  
+        label_mode='binary',
+        shuffle=True
     )
     
     val_ds = tf.keras.utils.image_dataset_from_directory(
@@ -187,13 +175,16 @@ def prepare_datasets(data_dir, img_height=128, img_width=128, batch_size=10, val
         image_size=(img_height, img_width),
         batch_size=batch_size,
         color_mode='grayscale',
-        label_mode='binary'
+        label_mode='binary',
+        shuffle=True
     )
     
+    # Normalização
     normalization_layer = layers.Rescaling(1./255)
-    
     train_ds = train_ds.map(lambda x, y: (normalization_layer(x), y))
     val_ds = val_ds.map(lambda x, y: (normalization_layer(x), y))
+    
+    # Otimizações
     AUTOTUNE = tf.data.AUTOTUNE
     train_ds = train_ds.cache().prefetch(buffer_size=AUTOTUNE)
     val_ds = val_ds.cache().prefetch(buffer_size=AUTOTUNE)
@@ -201,18 +192,21 @@ def prepare_datasets(data_dir, img_height=128, img_width=128, batch_size=10, val
     return train_ds, val_ds
 
 
-def prepare_test_dataset(test_dir, img_height=128, img_width=128, batch_size=1):
+def prepare_test_dataset(test_dir, img_height=64, img_width=64, batch_size=8):
+    """Prepara dataset de teste"""
     test_ds = tf.keras.utils.image_dataset_from_directory(
         test_dir,
         seed=42,
         image_size=(img_height, img_width),
         batch_size=batch_size,
         color_mode='grayscale',
-        label_mode='binary'
+        label_mode='binary',
+        shuffle=False
     )
     
     normalization_layer = layers.Rescaling(1./255)
     test_ds = test_ds.map(lambda x, y: (normalization_layer(x), y))
+    
     AUTOTUNE = tf.data.AUTOTUNE
     test_ds = test_ds.cache().prefetch(buffer_size=AUTOTUNE)
     
@@ -220,11 +214,13 @@ def prepare_test_dataset(test_dir, img_height=128, img_width=128, batch_size=1):
 
 
 def add_data_augmentation(train_ds):
+    """Data augmentation AGRESSIVO para poucos dados"""
     data_augmentation = keras.Sequential([
         layers.RandomFlip("horizontal_and_vertical"),
-        layers.RandomRotation(0.2),
-        layers.RandomZoom(0.2),
-        layers.RandomContrast(0.2),
+        layers.RandomRotation(0.4),  # Aumentado
+        layers.RandomZoom(0.3),
+        layers.RandomContrast(0.3),
+        layers.RandomTranslation(0.2, 0.2),
     ])
     
     train_ds = train_ds.map(
@@ -235,11 +231,70 @@ def add_data_augmentation(train_ds):
     return train_ds
 
 
+def calculate_class_weights(train_ds):
+    """Calcula pesos para balancear classes"""
+    all_labels = []
+    for _, labels in train_ds:
+        all_labels.extend(labels.numpy())
+    
+    all_labels = np.array(all_labels)
+    total = len(all_labels)
+    
+    count_class_0 = np.sum(all_labels == 0)
+    count_class_1 = np.sum(all_labels == 1)
+    
+    # Calcula pesos inversamente proporcionais
+    weight_class_0 = total / (2 * count_class_0) if count_class_0 > 0 else 1.0
+    weight_class_1 = total / (2 * count_class_1) if count_class_1 > 0 else 1.0
+    
+    class_weight = {0: weight_class_0, 1: weight_class_1}
+    
+    print(f"\n=== Distribuição de Classes ===")
+    print(f"Classe 0 (Normal): {count_class_0} ({count_class_0/total*100:.1f}%)")
+    print(f"Classe 1 (Anomaly): {count_class_1} ({count_class_1/total*100:.1f}%)")
+    print(f"Class weights: {class_weight}")
+    
+    return class_weight
+
+
+def print_dataset_info(data_dir):
+    """Mostra informações sobre o dataset"""
+    print("\n=== Informações do Dataset ===")
+    
+    normal_dir = os.path.join(data_dir, 'normal')
+    anomaly_dir = os.path.join(data_dir, 'anomaly')
+    
+    normal_count = len([f for f in os.listdir(normal_dir) 
+                       if f.endswith(('.png', '.jpg', '.jpeg', '.bmp'))])
+    anomaly_count = len([f for f in os.listdir(anomaly_dir) 
+                        if f.endswith(('.png', '.jpg', '.jpeg', '.bmp'))])
+    
+    total = normal_count + anomaly_count
+    
+    print(f"Imagens NORMAIS: {normal_count} ({normal_count/total*100:.1f}%)")
+    print(f"Imagens ANOMALIAS: {anomaly_count} ({anomaly_count/total*100:.1f}%)")
+    print(f"TOTAL: {total}")
+    
+    if total < 100:
+        print("\n⚠️  AVISO: Menos de 100 imagens!")
+        print("   Recomendação: Mínimo 200-500 imagens para CNN simples")
+    elif total < 500:
+        print("\n⚠️  Dataset pequeno detectado")
+        print("   Modelo simplificado e augmentation agressivo serão usados")
+    else:
+        print("\n✅ Dataset adequado para CNN")
+    
+    return normal_count, anomaly_count
+
+
 if __name__ == "__main__":
     DATA_DIR = "data_dir"
     TEST_DIR = "data_test"
     
-    print("=== Preparando Datasets ===")
+    # Verificar informações do dataset
+    print_dataset_info(DATA_DIR)
+    
+    print("\n=== Preparando Datasets ===")
     train_ds, val_ds = prepare_datasets(
         DATA_DIR, 
         img_height=IMG_HEIGHT, 
@@ -247,6 +302,9 @@ if __name__ == "__main__":
         batch_size=BATCH_SIZE,
         validation_split=0.2
     )
+    
+    # Calcular class weights para balanceamento
+    class_weight = calculate_class_weights(train_ds)
     
     print("\n=== Aplicando Data Augmentation ===")
     train_ds = add_data_augmentation(train_ds)
@@ -259,7 +317,7 @@ if __name__ == "__main__":
     detector.model.summary()
     
     print("\n=== Iniciando Treino ===")
-    detector.train(train_ds, val_ds)
+    detector.train(train_ds, val_ds, class_weight=class_weight)
     
     if os.path.exists(TEST_DIR):
         print("\n=== Preparando Dataset de Teste ===")
@@ -271,7 +329,10 @@ if __name__ == "__main__":
         print("\n=== Avaliação no Conjunto de Validação ===")
         detector.evaluate(val_ds)
     
-    print("\n=== Gerar Gráficos ===")
+    print("\n=== Gerando Gráficos ===")
     detector.plot_training_history()
+    
+    print("\n=== Salvando Modelo ===")
     detector.save_model('binary_anomaly_detector.keras')
+    
     print("\n=== Treino Concluído! ===")
