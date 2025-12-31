@@ -1,4 +1,4 @@
-from utils import FileBinaryObject, Digram, bin2int, ImageWriter, ShaderRenderer
+from utils import FileBinaryObject, Digram, ImageWriter, ShaderRenderer
 import matplotlib.pyplot as plt
 import os
 
