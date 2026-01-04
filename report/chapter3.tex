@@ -1,0 +1,20 @@
+
+\section{Methodology / Solution Architecture}
+
+\subsection{Data Acquisition}
+Malicious samples are sourced from Malware Bazaar, while benign executables come from internally created or pre-existing clean files. This yields an inherent class imbalance (more malware than benign), which is explicitly addressed during training via class weights.
+
+\subsection{Preprocessing}
+Each binary is converted to an image (Binary Sequence: $256\times256$; Opcode Analysis: $1024\times1024$) produced by the Python visualization pipeline (binary sequence + opcode analysis).
+
+
+TODO: CHECK THIS
+Datasets are loaded with \texttt{image\_dataset\_from\_directory} using \texttt{normal} and \texttt{anomaly} folders, an 80/20 train/validation split, grayscale mode, batch size 8, and on-the-fly normalization (\texttt{Rescaling(1./255)}). Caching and prefetching (\texttt{AUTOTUNE}) reduce I/O overhead.
+
+
+\subsection{Feature Extraction}
+Binary bytes and opcode distributions are rendered into statistical visualizations that encode structural and semantic patterns of executables. These images serve directly as input features to the CNN, eliminating manual feature engineering and enabling the model to learn visual cues indicative of malicious behavior.
+
+\subsection{Model Selection and Training}
+TODO: CHECK THIS
+A compact CNN is used to suit the small dataset: one \texttt{Conv2D(16, 3x3)} with ReLU, \texttt{MaxPooling2D}, and dropout, followed by \texttt{Flatten}, a \texttt{Dense(32)} layer with ReLU and dropout, and a sigmoid output neuron. The model is trained with Adam (lr $1\times10^{-4}$), binary cross-entropy loss, and metrics accuracy/precision/recall/AUC. Aggressive data augmentation (random flips, rotations up to 0.4 rad, zoom 0.3, contrast 0.3, translations 0.2) combats overfitting. Class imbalance is mitigated via inverse-frequency class weights computed from the training set. Early stopping (patience 15, restoring best weights), learning-rate reduction on plateau (factor 0.5, patience 7, \texttt{min\_lr} $1\times10^{-7}$), and checkpointing to \texttt{best\_model.keras} are enabled. Training runs up to 50 epochs; evaluation is reported on validation or held-out test data when available.
