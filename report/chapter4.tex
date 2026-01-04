@@ -1,0 +1,21 @@
+\section{Implementation}
+
+The implementation splits into a file-analysis pipeline (binary/opcode visualization) and a CNN-based classifier trained on the generated images. Key dependencies: \texttt{numpy}, \texttt{Pillow}, \texttt{moderngl} for GPU rendering, \texttt{lief} + \texttt{capstone} for opcode disassembly, and \texttt{tensorflow/keras} for model training.
+
+\subsection{File Analysis}
+	\textbf{Input discovery and outputs.} \texttt{main.py} recursively walks \texttt{input/}, mirrors the folder structure under \texttt{output/}, and processes every non-hidden file. Executable types (\texttt{.exe}, \texttt{.dll}, \texttt{.elf}, \texttt{.bin}, \texttt{.elf64}, \texttt{.elf32}) get both opcode and digram visualizations; other files get digram-only images.
+
+	\textbf{Binary digram images.} Each file is read byte-by-byte via \texttt{FileBinaryObject}; \texttt{Digram} keeps a $256\times256\times2$ tensor where channel 0 counts occurrences of consecutive byte pairs and channel 1 accumulates positional offsets. After normalization (divide by data size), the tensor is uploaded to the GPU with \texttt{ShaderRenderer.upload\_texture} and rendered off-screen to a $256\times256$ RGB image saved under \texttt{output/.../digram\_images/}. The OpenGL renderer uses either bundled GLSL shaders or inline fallbacks; off-screen rendering avoids window dependencies.
+
+	\textbf{Opcode images.} For executables, \texttt{OpcodeAnalyzer} disassembles code sections using \texttt{lief} and \texttt{capstone} (x86\_64). Opcodes are truncated to three characters and streamed; on marked opcodes (\texttt{mov}, \texttt{ret}), the current opcode string is hashed twice (SimHash and DJB2) to derive $2^{10}\times2^{10}$ pixel coordinates and RGB values. A 3\,\texttimes\,3 splash updates neighboring pixels in \texttt{texture\_array}; the result is written to \texttt{output/.../opcode\_images/}. This encodes opcode distribution and locality as color density maps.
+
+	\textbf{Technical considerations.} The pipeline guards against hidden files, preserves directory layout, and releases GPU resources after each render. Image sizes differ by modality (digram: $256\times256$; opcode: $1024\times1024$) but both are normalized float buffers converted to PNG.
+
+\subsection{Machine Learning}
+	\textbf{Data loading and normalization.} Generated images are organized into \texttt{data\_dir/normal} and \texttt{data\_dir/anomaly}. Datasets are created with \texttt{image\_dataset\_from\_directory} (80/20 split, grayscale, $64\times64$, batch size 8), followed by on-the-fly \texttt{Rescaling(1./255)}, caching, and prefetching with \texttt{AUTOTUNE}.
+
+	\textbf{Model architecture.} A compact CNN suits the small dataset: one convolution (16 filters, $3\times3$, ReLU), max pooling, dropout, then \texttt{Flatten}, a \texttt{Dense(32)} with ReLU and dropout, and a sigmoid output. Optimizer: Adam (learning rate $1\times10^{-4}$); loss: binary cross-entropy; metrics: accuracy, precision, recall, AUC. Aggressive augmentation (random flip, rotation up to 0.4, zoom 0.3, contrast 0.3, translation 0.2) is applied to training batches.
+
+	\textbf{Imbalance handling and training control.} Class weights are computed inversely to class frequency to offset the benign/malicious imbalance. Training uses early stopping (patience 15, restore best), learning-rate reduction on plateau (factor 0.5, patience 7, \texttt{min\_lr} $1\times10^{-7}$), and model checkpointing to \texttt{best\_model.keras}. Default run: 50 epochs; evaluation can target validation or a held-out \texttt{data\_test} set.
+
+	\textbf{Outputs.} Training history plots (loss, accuracy, precision, recall) are saved; the best-performing weights are stored for later inference via the lightweight \texttt{predict\_image} helper.

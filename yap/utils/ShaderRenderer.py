@@ -152,7 +152,6 @@ class ShaderRenderer:
         # Convert to RGB and save
         img = img.convert('RGB')
         img.save(filename)
-        print(f"Image saved as {filename}")
         
         return img
     
