@@ -4,12 +4,14 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import matplotlib.pyplot as plt
 import os
+from sklearn.metrics import confusion_matrix, classification_report
+import seaborn as sns
 
 # Configuração para POUCOS DADOS
-IMG_HEIGHT = 64  # REDUZIDO para modelo mais simples
-IMG_WIDTH = 64
-BATCH_SIZE = 8   # Pequeno para poucos dados
-EPOCHS = 50
+IMG_HEIGHT = 256  # Usa resolução completa das imagens
+IMG_WIDTH = 256
+BATCH_SIZE = 4   # Muito pequeno para melhor convergência com poucos dados
+EPOCHS = 300     # Muito aumentado para permitir aprendizado profundo
 
 class BinaryAnomalyDetector:
     def __init__(self, img_height=64, img_width=64):
@@ -19,23 +21,40 @@ class BinaryAnomalyDetector:
         self.history = None
         
     def build_model(self):
-        """Modelo SIMPLIFICADO para poucos dados"""
+        """Modelo melhorado com mais capacidade"""
         model = keras.Sequential([
-            # Apenas 1 camada convolucional
-            layers.Conv2D(16, (3, 3), activation='relu', 
-                         input_shape=(self.img_height, self.img_width, 1)),
+            # Primeira camada convolucional
+            layers.Conv2D(32, (3, 3), activation='relu', 
+                         input_shape=(self.img_height, self.img_width, 3)),
+            layers.BatchNormalization(),
+            layers.MaxPooling2D((2, 2)),
+            layers.Dropout(0.2),
+            
+            # Segunda camada convolucional
+            layers.Conv2D(64, (3, 3), activation='relu'),
+            layers.BatchNormalization(),
+            layers.MaxPooling2D((2, 2)),
+            layers.Dropout(0.2),
+            
+            # Terceira camada convolucional
+            layers.Conv2D(128, (3, 3), activation='relu'),
+            layers.BatchNormalization(),
             layers.MaxPooling2D((2, 2)),
             layers.Dropout(0.3),
             
-            # Camadas densas mínimas
+            # Camadas densas
             layers.Flatten(),
-            layers.Dense(32, activation='relu'),
+            layers.Dense(256, activation='relu'),
+            layers.BatchNormalization(),
             layers.Dropout(0.5),
+            layers.Dense(128, activation='relu'),
+            layers.BatchNormalization(),
+            layers.Dropout(0.3),
             layers.Dense(1, activation='sigmoid')
         ])
         
         model.compile(
-            optimizer=keras.optimizers.Adam(learning_rate=0.0001),  # LR menor
+            optimizer=keras.optimizers.Adam(learning_rate=0.001),  # LR aumentado
             loss='binary_crossentropy',
             metrics=['accuracy', 
                     keras.metrics.Precision(),
@@ -50,7 +69,7 @@ class BinaryAnomalyDetector:
         """Treina com opção de class_weight para balanceamento"""
         early_stopping = keras.callbacks.EarlyStopping(
             monitor='val_loss',
-            patience=15,  # Maior paciência para poucos dados
+            patience=50,  # Muita paciência para poucos dados permitir aprendizado completo
             restore_best_weights=True
         )
         
@@ -150,6 +169,50 @@ class BinaryAnomalyDetector:
     def load_model(self, filepath='anomaly_detector.keras'):
         self.model = keras.models.load_model(filepath)
         print(f"Modelo carregado de: {filepath}")
+    
+    def plot_confusion_matrix(self, test_ds):
+        """Gera e exibe matriz de confusão"""
+        all_labels = []
+        all_predictions = []
+        all_probabilities = []
+        
+        for images, labels in test_ds:
+            predictions = self.model.predict(images, verbose=0)
+            all_probabilities.extend(predictions.flatten())
+            all_predictions.extend((predictions > 0.5).astype(int).flatten())
+            all_labels.extend(labels.numpy())
+        
+        all_labels = np.array(all_labels)
+        all_predictions = np.array(all_predictions)
+        all_probabilities = np.array(all_probabilities)
+        
+        # Diagnóstico: distribuição de probabilidades
+        print("\n=== Diagnóstico de Predições ===")
+        print(f"Probabilidade mínima: {all_probabilities.min():.4f}")
+        print(f"Probabilidade máxima: {all_probabilities.max():.4f}")
+        print(f"Probabilidade média: {all_probabilities.mean():.4f}")
+        print(f"Predições como ANOMALIA (>0.5): {(all_predictions == 1).sum()}/{len(all_predictions)}")
+        print(f"Predições como NORMAL (<=0.5): {(all_predictions == 0).sum()}/{len(all_predictions)}")
+        
+        # Matriz de confusão
+        cm = confusion_matrix(all_labels, all_predictions)
+        
+        # Plot
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                    xticklabels=['Normal', 'Anomalia'],
+                    yticklabels=['Normal', 'Anomalia'])
+        plt.title('Matriz de Confusão')
+        plt.ylabel('Verdadeiro')
+        plt.xlabel('Predito')
+        plt.tight_layout()
+        plt.savefig('confusion_matrix.png', dpi=300, bbox_inches='tight')
+        plt.show()
+        
+        # Relatório de classificação
+        print("\n=== Relatório de Classificação ===")
+        print(classification_report(all_labels, all_predictions, 
+                                   target_names=['Normal', 'Anomalia']))
 
 
 def prepare_datasets(data_dir, img_height=64, img_width=64, batch_size=8, 
@@ -162,7 +225,7 @@ def prepare_datasets(data_dir, img_height=64, img_width=64, batch_size=8,
         seed=seed,
         image_size=(img_height, img_width),
         batch_size=batch_size,
-        color_mode='grayscale',
+        color_mode='rgb',
         label_mode='binary',
         shuffle=True
     )
@@ -174,7 +237,7 @@ def prepare_datasets(data_dir, img_height=64, img_width=64, batch_size=8,
         seed=seed,
         image_size=(img_height, img_width),
         batch_size=batch_size,
-        color_mode='grayscale',
+        color_mode='rgb',
         label_mode='binary',
         shuffle=True
     )
@@ -199,7 +262,7 @@ def prepare_test_dataset(test_dir, img_height=64, img_width=64, batch_size=8):
         seed=42,
         image_size=(img_height, img_width),
         batch_size=batch_size,
-        color_mode='grayscale',
+        color_mode='rgb',
         label_mode='binary',
         shuffle=False
     )
@@ -325,9 +388,15 @@ if __name__ == "__main__":
         
         print("\n=== Avaliação no Conjunto de Teste ===")
         detector.evaluate(test_ds)
+        
+        print("\n=== Matriz de Confusão ===")
+        detector.plot_confusion_matrix(test_ds)
     else:
         print("\n=== Avaliação no Conjunto de Validação ===")
         detector.evaluate(val_ds)
+        
+        print("\n=== Matriz de Confusão ===")
+        detector.plot_confusion_matrix(val_ds)
     
     print("\n=== Gerando Gráficos ===")
     detector.plot_training_history()
