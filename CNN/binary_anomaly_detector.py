@@ -21,7 +21,7 @@ class BinaryAnomalyDetector:
         self.history = None
         
     def build_model(self):
-        """Modelo melhorado com mais capacidade"""
+        """Modelo melhorado com mais capacidade para imagens 1024x1024"""
         model = keras.Sequential([
             # Primeira camada convolucional
             layers.Conv2D(32, (3, 3), activation='relu', 
@@ -41,6 +41,18 @@ class BinaryAnomalyDetector:
             layers.BatchNormalization(),
             layers.MaxPooling2D((2, 2)),
             layers.Dropout(0.3),
+            
+            # Quarta camada convolucional (para imagens maiores)
+            layers.Conv2D(256, (3, 3), activation='relu'),
+            layers.BatchNormalization(),
+            layers.MaxPooling2D((2, 2)),
+            layers.Dropout(0.3),
+            
+            # Quinta camada convolucional (para imagens maiores)
+            layers.Conv2D(512, (3, 3), activation='relu'),
+            layers.BatchNormalization(),
+            layers.MaxPooling2D((2, 2)),
+            layers.Dropout(0.4),
             
             # Camadas densas
             layers.Flatten(),
