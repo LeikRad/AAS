@@ -1,4 +1,4 @@
-# Project Title (e.g., Passive Malware Detection using Byte N-Grams)
+# Visual Malware Detection via Convolutional Neural Networks on Digram and Opcode Representations
 
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Python](https://img.shields.io/badge/Python-3.12%2B-blue)
@@ -7,11 +7,11 @@
 
 This repository contains the source code for the Practical Project of the **Aprendizagem Aplicada à Segurança (AAS)** course.
 
-The objective of this project is to [briefly describe goal, e.g., classify portable executable (PE) files as benign or malicious] using [briefly describe technique, e.g., Random Forest classifiers based on header metadata].
+The objective of this project is to validate the effectiveness of using visual representations of binary files for passive malware detection versus traditional methods like similarity analysis. We implement two visualization techniques: digram analysis and opcode analysis, and train Convolutional Neural Networks (CNNs) to classify the generated images as benign or malicious.
 
 **Authors:**
-* Student Name 1 (nMec)
-* Student Name 2 (nMec)
+* Bernardo Figueiredo (108073)
+* Leonardo Falcão (127891)
 
 ## Prerequisities
 
@@ -26,8 +26,9 @@ It is strongly recommended to run this project inside a virtual environment to a
 ```bash
 tar xvf [compressed_file].tar.xz 
 cd [your-project]
-````
+```
 
+### For each folder in the src folder!
 ### 2. Create and Activate Virtual Environment
 
 **Linux / macOS:**
@@ -52,26 +53,43 @@ pip install -r requirements.txt
 
 ## Dataset
 
-This project utilizes the [Name of Dataset] dataset.
+This project utilizes a handmade dataset consiting of image files created by our visualization pipeline, which processes binary files into visual representations using digram and opcode analysis techniques.
 
-  * **Source:** [Link to dataset]
-  * **Setup:** Place the dataset files in the `data/` folder. If the dataset is large, run the provided script to download it:
-    ```bash
-    python scripts/download_data.py
-    ```
+  * **Source:** Handmade dataset.
 
 ## Usage
 
-To train the model:
+To create visualizations from files:
 
+First place the files into your desired folder structure inside the `/yap/input/` directory. (if the input folder has more than one file, it will process all files inside it)
+
+Then run the following command:
 ```bash
-python src/train.py --input data/train.csv --output models/rf_model.pkl
+python src/yap/main.py
+```
+
+To train the model, place the generated images into the `/CNN/dataset/` directory, following the structure:
+```
+CNN/data_dir
+├── anomaly
+│   ├── file1.png
+│   ├── file2.png
+│   └── ...
+└── normal
+    ├── file1.png
+    ├── file2.png
+    └── ...
+```
+
+Then run the training script:
+```bash
+python src/CNN/binary_anomaly_detector.py 
 ```
 
 To run the classification on a new file:
 
 ```bash
-python src/main.py --target suspicious_file.exe --model models/rf_model.pkl
+python src/CNN/test.py -i path/to/file.exe 
 ```
 
 ## Major Results
