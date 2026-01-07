@@ -76,18 +76,12 @@ python src/main.py --target suspicious_file.exe --model models/rf_model.pkl
 
 ## Major Results
 
-The following table summarizes the performance of our best model ([Model Name]) on the test set (20% split).
-
-| Class | Precision | Recall | F1-Score | Support |
-| :--- | :---: | :---: | :---: | :---: |
-| **Benign** | 0.98 | 0.97 | 0.97 | 1050 |
-| **Malicious** | 0.96 | 0.99 | 0.97 | 980 |
-| **Accuracy** | | | **0.97** | 2030 |
+No results showed an statistically significant improvement over random guessing due to the small dataset size. However, some promising patterns were observed.
 
 **Key Findings:**
 
-  * The model achieved a low False Negative Rate (FNR), which is critical for security applications.
-  * Feature extraction overhead was approximately 15ms per file.
+  * Statistical analysis of digram/opcode visualizations were better than our CNN models, although with a higher dataset more promising results could be achieved.
+  * The CNN models were able to learn some meaningful patterns, but overfitting was a significant issue.
 
 ## License
 
