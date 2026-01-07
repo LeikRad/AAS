@@ -1,11 +1,50 @@
 \section{Results and Evaluation}
 
-\begin{itemize}
-    \item \textbf{Metrics:} Do not just show Accuracy. You must include:
-    \begin{itemize}
-        \item Precision, Recall, F1-Score.
-        \item Confusion Matrix.
-    \end{itemize}
-    \item \textbf{Comparisons:} Compare different models (e.g., Random Forest vs. Naive Bayes) or different feature sets.
-    \item \textbf{Security Analysis:} Discuss False Positives vs. False Negatives. In your specific context, which is worse? (e.g., Blocking a CEO's legitimate email vs. letting a virus through).
-\end{itemize}
+For the digram-based model, validation was performed on only 12 samples, making every misclassification materially affect the reported metrics. The confusion matrix (Normal/Anomalia) shows: true normal correctly classified (4), normal misclassified as anomaly (3), anomaly misclassified as normal (2), and anomaly correctly classified (3). Thus, false negatives (2) and false positives (3) are both non-trivial, indicating limited class separability under the current operating threshold.
+
+The loss curves exhibit early instability in validation loss (spikes near 3) before a sharp drop around epoch \textasciitilde45, after which validation loss plateaus near \textasciitilde1.0 while training loss remains markedly lower (\textasciitilde0.5--0.7). This persistent gap indicates mild overfitting, compounded by the small validation split.
+
+Accuracy hovers around 70--75\% for both training and validation but changes in discrete steps, reflecting the very small validation set where a single sample flip materially alters the percentage. Consequently, accuracy is not a robust indicator in this setting.
+
+Precision and recall on validation are highly threshold-sensitive: precision begins at 0, spikes to 1.0, and stabilizes near 0.6; recall starts at 0 and then jumps to 1.0, remaining high.
+
+Overall, the model learns meaningful patterns (recall for anomalies becomes strong), but conclusions are statistically fragile due to the tiny validation set. The observed generalization gap and the precision--recall trade-off suggest the need for more validation data, calibrated decision thresholds, or cost-sensitive tuning to reduce both missed anomalies and false alarms.
+\subsection{Digrams}
+\begin{figure}[htbp]
+\centering
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{images/digram_confusion}
+\caption{Confusion matrix for the digram-based classifier.}
+\label{fig:digram_confusion}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.48\textwidth}
+\centering
+\includegraphics[width=\linewidth]{images/digram_metrics}
+\caption{Training/validation curves (loss, accuracy, precision, recall) for digram inputs.}
+\label{fig:digram_metrics}
+\end{minipage}\hfill
+\end{figure}
+
+\subsection{Opcodes}
+For the opcode-based model, the confusion matrix in Figure~\ref{fig:opcode_confusion} summarizes binary classification performance across the \emph{Normal} and \emph{Anomaly} classes. The distribution of true positives, false positives, false negatives, and true negatives indicates only moderate class separability under the current decision threshold (0.5). In particular, false negatives (anomalies predicted as normal) are operationally costly in security contexts, while false positives (normals predicted as anomalies) inflate the alert burden and may reduce trust in the system. Given the limited validation size, each misclassification materially perturbs the apparent rates, and care is warranted when interpreting these counts.
+
+The training/validation curves in Figure~\ref{fig:opcode_metrics} exhibit early volatility in validation loss, followed by partial stabilization at later epochs. A persistent generalization gap (validation loss remaining above training loss) suggests mild overfitting, plausibly driven by small validation splits, and variability introduced by opcode sequence hashing. Accuracy follows discrete steps consistent with small validation sets, and therefore is not a robust metric here. Precision and recall show threshold-sensitive behavior: periods of low precision coincide with aggressive anomaly detection (higher recall), whereas more conservative operating points improve precision but risk missed anomalies. This trade-off is expected for opcode-level fingerprints that are susceptible to obfuscation, packing, and section-level heterogeneity.
+
+Overall, the opcode model does capture instruction-level structure---as evidenced by non-random confusion patterns and meaningful precision/recall dynamics---but conclusions remain statistically fragile due to the small validation set and the fixed operating threshold. Strengthening external validity will likely require (i) enlarging and balancing the validation set, (ii) calibrating the decision threshold (e.g., ROC-based selection, cost-sensitive criteria), (iii) regularization and/or augmentation tailored to opcode fingerprints, and (iv) evaluating robustness to common transformations (packing/obfuscation). These adjustments aim to reduce both missed anomalies and false alarms while preserving sensitivity to genuine opcode-level malicious behavior.
+\begin{figure}[htbp]
+\centering
+\begin{minipage}[t]{0.3\textwidth}
+\centering
+\includegraphics[width=\linewidth]{images/opcode_confusion}
+\caption{Confusion matrix for the opcode-based classifier.}
+\label{fig:opcode_confusion}
+\end{minipage}
+\begin{minipage}[t]{0.3\textwidth}
+\centering
+\includegraphics[width=\linewidth]{images/opcode_metrics}
+\caption{Training/validation curves (loss, accuracy, precision, recall) for opcode inputs.}
+\label{fig:opcode_metrics}
+
+\end{minipage}
+\end{figure}

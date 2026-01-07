@@ -1,10 +1,10 @@
 \section{Related Work}
 
-% TODO CITE THE VELES GITHUB HERE
-Several approaches have explored the application of visual analysis and machine learning to malware detection. \textit{Veles}, a binary visualization tool, provides statistical visualizations of binary sequences, enabling analysts to identify patterns and anomalies in binary data through entropy analysis and visual heuristics. Our analysis of Veles and its source code informed our binary visualization pipeline, establishing the foundation for converting low-level binary data into analyzable image representations.
+Several approaches have explored the application of visual analysis and machine learning to malware detection. 
 
-% TODO CITE THE PAPER HERE CORRECTLY
-The seminal work, introduced opcode analysis as a technique for malware detection, leveraging the observation that malicious executables exhibit distinctive opcode patterns compared to benign software. This paper cited in our project description provided the theoretical basis for extracting and analyzing opcode sequences from executable files as a feature extraction strategy.
+\textit{Veles}\cite{Codilime}, a binary visualization tool, provides statistical visualizations of binary sequences, enabling analysts to identify patterns and anomalies in binary data through entropy analysis and visual heuristics. Our analysis of Veles and its source code informed our binary visualization pipeline, establishing the foundation for converting low-level binary data into analyzable image representations.
+
+The seminal work given by the teacher, introduced opcode analysis as a technique for malware detection, leveraging the observation that malicious executables exhibit distinctive opcode patterns compared to benign software. This paper cited in our project description provided the theoretical basis for extracting and analyzing opcode sequences from executable files as a feature extraction strategy.\cite{Han2013}
 
 Our approach replicates and extends the data extraction techniques from both Veles and the opcode analysis methodology. However, rather than relying on manual similarity percentages or heuristic-based classification as in previous work, we leverage modern deep learning architectures (Convolutional Neural Networks) to automatically learn discriminative features from the generated visualizations. This shift from traditional feature engineering and similarity matching to end-to-end deep learning enables our system to discover complex patterns in binary data that may not be apparent through manual analysis.
 

@@ -3,19 +3,67 @@
 The implementation splits into a file-analysis pipeline (binary/opcode visualization) and a CNN-based classifier trained on the generated images. Key dependencies: \texttt{numpy}, \texttt{Pillow}, \texttt{moderngl} for GPU rendering, \texttt{lief} + \texttt{capstone} for opcode disassembly, and \texttt{tensorflow/keras} for model training.
 
 \subsection{File Analysis}
-	\textbf{Input discovery and outputs.} \texttt{main.py} recursively walks \texttt{input/}, mirrors the folder structure under \texttt{output/}, and processes every non-hidden file. Executable types (\texttt{.exe}, \texttt{.dll}, \texttt{.elf}, \texttt{.bin}, \texttt{.elf64}, \texttt{.elf32}) get both opcode and digram visualizations; other files get digram-only images.
+\textbf{Pipeline driver (\texttt{main.py}).} Recursively walks \texttt{input/}, skips hidden files, mirrors the directory structure under \texttt{output/}, and hands each file to the visualization pipeline. Executable extensions (\texttt{.exe}, \texttt{.dll}, \texttt{.elf}, \texttt{.bin}, \texttt{.elf64}, \texttt{elf32}) produce both opcode and digram images; everything else produces digrams only.
 
-	\textbf{Binary digram images.} Each file is read byte-by-byte via \texttt{FileBinaryObject}; \texttt{Digram} keeps a $256\times256\times2$ tensor where channel 0 counts occurrences of consecutive byte pairs and channel 1 accumulates positional offsets. After normalization (divide by data size), the tensor is uploaded to the GPU with \texttt{ShaderRenderer.upload\_texture} and rendered off-screen to a $256\times256$ RGB image saved under \texttt{output/.../digram\_images/}. The OpenGL renderer uses either bundled GLSL shaders or inline fallbacks; off-screen rendering avoids window dependencies.
+\textbf{FileBinaryObject (I/O wrapper).} Lightweight helper that opens files in binary mode (\texttt{rb+}), streams bytes via \texttt{readNBytes(1)}, and exposes \texttt{reset()} / \texttt{close()}. 
 
-	\textbf{Opcode images.} For executables, \texttt{OpcodeAnalyzer} disassembles code sections using \texttt{lief} and \texttt{capstone} (x86\_64). Opcodes are truncated to three characters and streamed; on marked opcodes (\texttt{mov}, \texttt{ret}), the current opcode string is hashed twice (SimHash and DJB2) to derive $2^{10}\times2^{10}$ pixel coordinates and RGB values. A 3\,\texttimes\,3 splash updates neighboring pixels in \texttt{texture\_array}; the result is written to \texttt{output/.../opcode\_images/}. This encodes opcode distribution and locality as color density maps.
+\textbf{Digram (byte-pair histogrammer).} Maintains a sliding window of two bytes and updates a $256\times256\times2$ float32 tensor: channel~0 counts frequency of each ordered byte pair; channel~1 accumulates the byte position (a running counter). On \texttt{finalize()}, both channels are normalized by data size (frequency) and data size squared (position) to yield values in $[0,1]$. Figures \ref{fig:digram_sample_1}, \ref{fig:digram_sample_2}, and \ref{fig:digram_sample_3} show example digram visualizations.
 
-	\textbf{Technical considerations.} The pipeline guards against hidden files, preserves directory layout, and releases GPU resources after each render. Image sizes differ by modality (digram: $256\times256$; opcode: $1024\times1024$) but both are normalized float buffers converted to PNG.
+
+\begin{figure}[htbp]
+	\centering
+	\begin{minipage}[t]{0.3\textwidth}
+	\centering
+
+	\includegraphics[width=\linewidth]{images/digramBenign}
+	\caption{Digram visualization (Benign Sample).}
+	\label{fig:digram_sample_1}
+	\end{minipage}\hfill
+	\begin{minipage}[t]{0.3\textwidth}
+	\centering
+
+	\includegraphics[width=\linewidth]{images/DigramMalware1}
+	\caption{Digram visualization (Malicious Sample 1).}
+	\label{fig:digram_sample_2}
+	\end{minipage}\hfill
+	\begin{minipage}[t]{0.3\textwidth}
+	\centering
+
+	\includegraphics[width=\linewidth]{images/DigramMalware2}
+	\caption{Digram visualization (Malicious Sample 2).}
+	\label{fig:digram_sample_3}
+	\end{minipage}
+
+\end{figure}
+
+\textbf{ShaderRenderer (GPU renderer).} Creates a headless ModernGL context, uploads the $256\times256\times2$ tensor as an RG32F texture, and renders it with fragment shader that maps frequency and relative position into RGB. Off-screen rendering writes a $256\times256$ PNG.
+
+\textbf{OpcodeAnalyzer (opcode fingerprinting).} For executables, parses with LIEF and disassembles sections using Capstone (x86\_64). Mnemonics are truncated to three chars and concatenated until a marked opcode (\texttt{mov}, \texttt{ret}) triggers processing. The accumulated string is SimHashed (64-bit) to obtain $(x,y)$ coordinates on a $2^{10}\times2^{10}$ grid; a DJB2 hash yields RGB. A $3\times3$ neighborhood around $(x,y)$ is incremented in a $1024\times1024\times3$ float32 tensor (clamped to $[0,1]$). Figures \ref{fig:opcode_sample_1} and \ref{fig:opcode_sample_2} show example opcode visualizations.
+
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}[t]{0.3\textwidth}
+\centering
+\includegraphics[width=\linewidth]{images/BenignOpcode.png}
+\caption{Opcode visualization (Benign Sample).}
+\label{fig:opcode_sample_1}
+\end{minipage}\hfill
+\begin{minipage}[t]{0.3\textwidth}
+\centering
+\includegraphics[width=\linewidth]{images/MalwareOpcode.png}
+\caption{Opcode visualization (Malicious Sample).}
+\label{fig:opcode_sample_2}
+\end{minipage}
+\end{figure}
+
 
 \subsection{Machine Learning}
-	\textbf{Data loading and normalization.} Generated images are organized into \texttt{data\_dir/normal} and \texttt{data\_dir/anomaly}. Datasets are created with \texttt{image\_dataset\_from\_directory} (80/20 split, grayscale, $64\times64$, batch size 8), followed by on-the-fly \texttt{Rescaling(1./255)}, caching, and prefetching with \texttt{AUTOTUNE}.
 
-	\textbf{Model architecture.} A compact CNN suits the small dataset: one convolution (16 filters, $3\times3$, ReLU), max pooling, dropout, then \texttt{Flatten}, a \texttt{Dense(32)} with ReLU and dropout, and a sigmoid output. Optimizer: Adam (learning rate $1\times10^{-4}$); loss: binary cross-entropy; metrics: accuracy, precision, recall, AUC. Aggressive augmentation (random flip, rotation up to 0.4, zoom 0.3, contrast 0.3, translation 0.2) is applied to training batches.
+\textbf{Data loading and normalization.} Generated images are organized into \texttt{data\_dir/normal} and \texttt{data\_dir/anomaly}. Datasets are created with \texttt{image\_dataset\_from\_directory} using an 80/20 train/validation split (seed~42), RGB color mode, batch size~4 to accommodate GPU memory constraints with larger images, and dynamic resizing to $256\times256$ pixels during loading. On-the-fly normalization via \texttt{Rescaling(1./255)} converts pixel values to $[0,1]$ range. Performance optimizations include \texttt{cache()} to retain preprocessed batches in memory after the first epoch and \texttt{prefetch(buffer\_size=AUTOTUNE)} to overlap data loading with model training.
 
-	\textbf{Imbalance handling and training control.} Class weights are computed inversely to class frequency to offset the benign/malicious imbalance. Training uses early stopping (patience 15, restore best), learning-rate reduction on plateau (factor 0.5, patience 7, \texttt{min\_lr} $1\times10^{-7}$), and model checkpointing to \texttt{best\_model.keras}. Default run: 50 epochs; evaluation can target validation or a held-out \texttt{data\_test} set.
+\textbf{Model architecture.} The structure of the CNN has already been described in Section 3.D.
 
-	\textbf{Outputs.} Training history plots (loss, accuracy, precision, recall) are saved; the best-performing weights are stored for later inference via the lightweight \texttt{predict\_image} helper.
+\textbf{Imbalance handling and training control.} Class weights are computed as $w_i = \frac{N}{2 \cdot N_i}$ (inversely proportional to class frequency) to offset benign/malicious imbalance. Training employs \texttt{EarlyStopping} (monitor \texttt{val\_loss}, patience~50, restore best weights), \texttt{ReduceLROnPlateau} (factor~0.5, patience~7, \texttt{min\_lr} $1\times10^{-7}$), and \texttt{ModelCheckpoint} to \texttt{best\_model.keras}. Training runs up to 300~epochs, typically halted earlier by early stopping; evaluation targets validation or a held-out \texttt{data\_test} set.
+
+\textbf{Outputs.} Training history plots (loss, accuracy, precision, recall) are saved; the best-performing weights are stored for later inference via the lightweight \texttt{predict\_image} helper.

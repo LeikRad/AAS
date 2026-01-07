@@ -2,19 +2,20 @@
 \section{Methodology / Solution Architecture}
 
 \subsection{Data Acquisition}
-Malicious samples are sourced from Malware Bazaar, while benign executables come from internally created or pre-existing clean files. This yields an inherent class imbalance (more malware than benign), which is explicitly addressed during training via class weights.
+Malicious samples are sourced from Malware Bazaar, while benign executables come from internally created or pre-existing clean files. This yields an inherent class imbalance. Careful creation of the dataset was undertaken to ensure that there was a 50/50 split between benign and malicious samples in both training and validation sets, despite the overall imbalance in the raw data.
 
 \subsection{Preprocessing}
 Each binary is converted to an image (Binary Sequence: $256\times256$; Opcode Analysis: $1024\times1024$) produced by the Python visualization pipeline (binary sequence + opcode analysis).
 
-
-TODO: CHECK THIS
-Datasets are loaded with \texttt{image\_dataset\_from\_directory} using \texttt{normal} and \texttt{anomaly} folders, an 80/20 train/validation split, grayscale mode, batch size 8, and on-the-fly normalization (\texttt{Rescaling(1./255)}). Caching and prefetching (\texttt{AUTOTUNE}) reduce I/O overhead.
+Datasets are loaded with \texttt{image\_dataset\_from\_directory} using \texttt{normal} and \texttt{anomaly} folders, an 80/20 train/validation split (seed~42), RGB color mode, batch size~4 (to fit GPU memory with $256\times256$ inputs), and on-the-fly normalization via \texttt{Rescaling(1./255)}. Images are resized during loading to $(\text{img\_height}, \text{img\_width})$ (defaults $256\times256$ in the training script). Caching and prefetching (\texttt{AUTOTUNE}) reduce I/O overhead; the test loader mirrors this pipeline but sets \texttt{shuffle=False} for deterministic evaluation.
 
 
 \subsection{Feature Extraction}
 Binary bytes and opcode distributions are rendered into statistical visualizations that encode structural and semantic patterns of executables. These images serve directly as input features to the CNN, eliminating manual feature engineering and enabling the model to learn visual cues indicative of malicious behavior.
 
 \subsection{Model Selection and Training}
-TODO: CHECK THIS
-A compact CNN is used to suit the small dataset: one \texttt{Conv2D(16, 3x3)} with ReLU, \texttt{MaxPooling2D}, and dropout, followed by \texttt{Flatten}, a \texttt{Dense(32)} layer with ReLU and dropout, and a sigmoid output neuron. The model is trained with Adam (lr $1\times10^{-4}$), binary cross-entropy loss, and metrics accuracy/precision/recall/AUC. Aggressive data augmentation (random flips, rotations up to 0.4 rad, zoom 0.3, contrast 0.3, translations 0.2) combats overfitting. Class imbalance is mitigated via inverse-frequency class weights computed from the training set. Early stopping (patience 15, restoring best weights), learning-rate reduction on plateau (factor 0.5, patience 7, \texttt{min\_lr} $1\times10^{-7}$), and checkpointing to \texttt{best\_model.keras} are enabled. Training runs up to 50 epochs; evaluation is reported on validation or held-out test data when available.
+A three-block CNN is used: \texttt{Conv2D} layers with 32, 64,  128 filters (kernel $3\times3$), each followed by batch normalization, \texttt{MaxPooling2D(2,2)}, and dropout (0.2, 0.2, 0.3). The feature map is flattened and passed through two dense layers (\texttt{Dense(256)} and \texttt{Dense(128)}) with ReLU activations, batch normalization, and dropout (0.5, 0.3), then a sigmoid output neuron. The model is trained with Adam (lr $1\times10^{-3}$), binary cross-entropy loss, and metrics accuracy/precision/recall/AUC. 
+
+Data augmentation is aggressive on training batches to counteract the problem of the dataset size by using random transformations on the images. 
+
+Class imbalance is mitigated via inverse-frequency class weights. Training control uses \texttt{EarlyStopping} (patience 50, restore best), \texttt{ReduceLROnPlateau} (factor 0.5, patience 7, \texttt{min\_lr} $1\times10^{-7}$), and \texttt{ModelCheckpoint} to \texttt{best\_model.keras}. Runs are capped at 300 epochs, typically halted earlier by early stopping; evaluation targets validation or a held-out \texttt{data\_test} set.

@@ -1,6 +1,14 @@
 \section{Conclusion and Future Work}
 
+The empirical results were not sufficiently conclusive to assert that the proposed CNN reliably distinguishes between benign and malicious binaries from the generated visualizations. In particular, confusion matrices and training/validation curves indicate unstable generalization, threshold-sensitive precision/recall, and a persistent gap between training and validation losses. Under these conditions, classical statistical analysis of the visual artifacts---for example, image similarity measures, clustering, and distributional comparisons over digram/opcode features, remains a more dependable way to exploit these visualizations for exploratory analysis.
+
+The principal bottleneck is data scarcity: with a small and imbalanced validation set, each misclassification disproportionately affects metrics, undermining the statistical reliability of conclusions. If additional time were available, among the possible improvements referenced throughout the project, the single most impactful investment would be curating a larger, more diverse, and better-balanced dataset of labeled samples (both benign and malware), including variants with different packing/obfuscation schemes. This would enable:
+
 \begin{itemize}
-    \item Summarize the main achievements.
-    \item What would you do if you had 6 more months? (e.g., ``Test against adversarial attacks'', ``Optimize for real-time inference'').
+    \item Robust evaluation (e.g., stratified cross-validation, confidence intervals, and ROC/PR analysis) and calibrated decision thresholds.
+    \item More expressive models or regularization regimes without overfitting to scarce validation data.
+    \item Comparative baselines with statistical similarity pipelines (e.g., k-NN over feature embeddings, clustering stability tests).
+    \item Stress-testing for common transformations (packing/obfuscation) to quantify robustness.
 \end{itemize}
+
+In summary, while the model captures meaningful structure in the visualizations, current evidence is insufficient to claim dependable deployment. 
